@@ -1,0 +1,35 @@
+# --- Python / FastAPI backend ---
+/backend/__pycache__/
+/backend/*.pyc
+/backend/*.pyo
+/backend/*.pyd
+/backend/.env
+/backend/.python-version
+/backend/.mypy_cache/
+/backend/.pytest_cache/
+/backend/.venv/
+/backend/venv/
+/backend/env/
+/backend/.DS_Store
+
+# --- React frontend ---
+/frontend/node_modules/
+/frontend/build/
+/frontend/.pnp
+/frontend/.pnp.js
+/frontend/coverage/
+/frontend/.env.local
+/frontend/.env.development.local
+/frontend/.env.test.local
+/frontend/.env.production.local
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/.DS_Store
+
+# --- General ---
+.DS_Store
+*.log
+*.swp
+*.swo
+.env

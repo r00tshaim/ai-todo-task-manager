@@ -1,0 +1,216 @@
+# server.py
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Dict, Any, List, Optional
+from fastapi.middleware.cors import CORSMiddleware  # Add this import
+import uuid
+from langchain_core.messages import HumanMessage
+import uvicorn
+
+# Import the graph from agent.py
+from agent2 import graph, across_thread_memory
+
+app = FastAPI(title="ToDo mAIstro API", version="1.0.0")
+
+# Add CORS middleware - ADD THIS SECTION
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # React dev server
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Include OPTIONS
+    allow_headers=["*"],
+)
+
+# Pydantic models for request/response
+class NewChatRequest(BaseModel):
+    user_id: str
+    message: str
+
+class ContinueChatRequest(BaseModel):
+    user_id: str
+    thread_id: str
+    message: str
+
+class GetTodosRequest(BaseModel):
+    user_id: str
+
+class ChatResponse(BaseModel):
+    thread_id: str
+    response: str
+    message_id: Optional[str] = None
+
+class TodoItem(BaseModel):
+    task: str
+    time_to_complete: Optional[int] = None
+    deadline: Optional[str] = None
+    solutions: List[str] = []
+    status: str = "not started"
+
+class TodosResponse(BaseModel):
+    user_id: str
+    todos: List[Dict[str, Any]]
+
+@app.post("/chat/new", response_model=ChatResponse)
+async def start_new_chat(request: NewChatRequest):
+    """
+    Start a new chat session with a generated thread_id
+    """
+    try:
+        # Generate new thread_id
+        thread_id = str(uuid.uuid4())
+        
+        # Create config with thread_id and user_id
+        config = {
+            "configurable": {
+                "thread_id": thread_id,
+                "user_id": request.user_id
+            }
+        }
+        
+        # Create input message
+        input_messages = [HumanMessage(content=request.message)]
+        
+        # Run the graph and collect the response
+        response_content = ""
+        for chunk in graph.stream({"messages": input_messages}, config, stream_mode="values"):
+            if chunk["messages"]:
+                last_message = chunk["messages"][-1]
+                if hasattr(last_message, 'content') and last_message.content:
+                    response_content = last_message.content
+        
+        return ChatResponse(
+            thread_id=thread_id,
+            response=response_content or "I received your message and I'm ready to help with your tasks!"
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error starting new chat: {str(e)}")
+
+@app.post("/chat/continue", response_model=ChatResponse)
+async def continue_existing_chat(request: ContinueChatRequest):
+    """
+    Continue an existing chat session using thread_id
+    """
+    try:
+        # Create config with existing thread_id and user_id
+        config = {
+            "configurable": {
+                "thread_id": request.thread_id,
+                "user_id": request.user_id
+            }
+        }
+        
+        # Create input message
+        input_messages = [HumanMessage(content=request.message)]
+        
+        # Run the graph and collect the response
+        response_content = ""
+        for chunk in graph.stream({"messages": input_messages}, config, stream_mode="values"):
+            if chunk["messages"]:
+                last_message = chunk["messages"][-1]
+                if hasattr(last_message, 'content') and last_message.content:
+                    response_content = last_message.content
+        
+        return ChatResponse(
+            thread_id=request.thread_id,
+            response=response_content or "I received your message and processed it!"
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error continuing chat: {str(e)}")
+
+@app.post("/todos/get", response_model=TodosResponse)
+async def get_user_todos(request: GetTodosRequest):
+    """
+    Get all todo tasks for a specific user
+    """
+    try:
+        # Define the namespace for todo items
+        namespace = ("todo", request.user_id)
+        
+        # Retrieve all todo memories from the store
+        memories = across_thread_memory.search(namespace)
+        
+        # Format the todos
+        todos = []
+        for memory in memories:
+            todo_data = memory.value
+            # Add the memory key as an ID for reference
+            todo_item = {
+                "id": memory.key,
+                "task": todo_data.get("task", ""),
+                "time_to_complete": todo_data.get("time_to_complete"),
+                "deadline": todo_data.get("deadline"),
+                "solutions": todo_data.get("solutions", []),
+                "status": todo_data.get("status", "not started")
+            }
+            todos.append(todo_item)
+        
+        return TodosResponse(
+            user_id=request.user_id,
+            todos=todos
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving todos: {str(e)}")
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "message": "ToDo mAIstro API is running"}
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Welcome to ToDo mAIstro API",
+        "version": "1.0.0",
+        "endpoints": {
+            "POST /chat/new": "Start a new chat session",
+            "POST /chat/continue": "Continue an existing chat session",
+            "POST /todos/get": "Get user's todo tasks",
+            "POST /profile/get": "Get user profile information",
+            "GET /health": "Health check",
+            "GET /docs": "API documentation"
+        }
+    }
+
+# Additional utility endpoint to get user profile (optional)
+@app.post("/profile/get")
+async def get_user_profile(request: GetTodosRequest):
+    """
+    Get user profile information
+    """
+    try:
+        # Define the namespace for profile
+        namespace = ("profile", request.user_id)
+        
+        # Retrieve profile memories from the store
+        memories = across_thread_memory.search(namespace)
+        
+        if memories:
+            profile_data = memories[0].value
+            return {
+                "user_id": request.user_id,
+                "profile": profile_data
+            }
+        else:
+            return {
+                "user_id": request.user_id,
+                "profile": None,
+                "message": "No profile found for this user"
+            }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving profile: {str(e)}")
+
+# Run the server
+if __name__ == "__main__":
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
