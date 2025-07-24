@@ -5,10 +5,14 @@ import json
 from datetime import datetime
 from langchain_core.messages import HumanMessage
 from agent import graph
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
 # Redis connection
-redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+redis_client = redis.Redis(host=os.getenv("REDIS_HOST"), port=os.getenv("REDIS_PORT"), db=os.getenv("REDIS_DB"), decode_responses=True)
 
 def publish_to_stream(job_id: str, event_type: str, content: str = None, error: str = None, **kwargs):
     """
@@ -72,14 +76,24 @@ def process_chat_job(job_payload):
         chunk_count = 0
 
         for chunk in graph.stream({"messages": input_messages}, config, stream_mode="messages"):
-            print(f"Processing chunk {chunk_count}: {chunk}")
+            print(f"Processing chunk {chunk_count}: {chunk}\n")
             # Each chunk is a tuple: (AIMessageChunk, metadata_dict)
             if isinstance(chunk, tuple) and hasattr(chunk[0], "content"):
+                #print(f"Chunk {chunk_count}: {chunk[0]}\n")
                 msg_obj = chunk[0]
                 content = msg_obj.content
                 metadata = getattr(msg_obj, "response_metadata", {})
                 is_tool_call = bool(getattr(msg_obj, "tool_calls", None))
-                is_end = metadata.get("done_reason") == "stop" and not is_tool_call
+                is_end = False
+                print(f"metadata: {metadata}, is_tool_call: {is_tool_call}\n")
+                if metadata.get("model_name") and metadata.get("model_name").find("ollama") != -1:
+                    #print("llm provider is ollama\n\n")
+                    is_end = metadata.get("done_reason") == "stop" and not is_tool_call
+                elif metadata.get("model_name") and metadata.get("model_name").find("gemini") != -1:
+                    # For Gemini, finish_reason is used
+                    #print("llm provider is google_genai\n\n")
+                    is_end = metadata.get("finish_reason") == "STOP" and not is_tool_call
+                
 
                 print(f"Chunk {chunk_count}: {content} | End: {is_end}")
 

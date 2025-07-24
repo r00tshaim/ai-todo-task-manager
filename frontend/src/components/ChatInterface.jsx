@@ -63,6 +63,7 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
         (data) => {
           switch (data.type) {
             case 'start':
+              console.log('Stream started');
               //setStreamingMessage('🤔 Thinking...');
               break;
             case 'chunk':
@@ -71,16 +72,18 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
                 streamingMessageRef.current = updated;
                 return updated;
               });
+              console.log('Received chunk:', data.content);
               break;
             case 'end':
               // Use the ref to get the latest value
               const finalContent = streamingMessageRef.current + (data.content || "");
               setMessages(prev => [...prev, { role: 'assistant', content: finalContent }]);
               setStreamingMessage('');
-              streamingMessageRef.current = '';
               setIsLoading(false);
+              console.log('Stream ended:', isLoading);
               setCurrentJobId(null);
               onTodoUpdate();
+              streamingMessageRef.current = '';
               break;
           }
         },
@@ -224,7 +227,7 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
             <Send className="h-4 w-4" />
           </button>
         </div>
-        {isLoading && (
+        {streamingMessage.length == 0 && isLoading && (
           <div className="mt-2 text-xs text-blue-600">
             Job queued and processing...
           </div>

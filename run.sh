@@ -3,7 +3,7 @@
 # Run backend in new Terminal window
 osascript <<EOF
 tell application "Terminal"
-    do script "cd \"$(pwd)/backend\" && source venv/bin/activate && python server.py"
+    do script "cd \"$(pwd)/backend\" && source venv/bin/activate && uvicorn server:app --host 0.0.0.0 --port 8000 --reload"
 end tell
 EOF
 
