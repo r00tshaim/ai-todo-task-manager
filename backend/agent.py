@@ -396,7 +396,7 @@ within_thread_memory = MemorySaver()
 graph = builder.compile(checkpointer=within_thread_memory, store=across_thread_memory)
 
 
-
+"""# Example usage of the graph with a user profile and ToDo list
 # # We supply a thread ID for short-term (within-thread) memory
 # # We supply a user ID for long-term (across-thread) memory 
 config = {"configurable": {"thread_id": "1", "user_id": "Lance"}}
@@ -432,3 +432,18 @@ input_messages = [HumanMessage(content="For the swim lessons, I need to get that
 # # Run the graph
 for chunk in graph.stream({"messages": input_messages}, config, stream_mode="values"):
     chunk["messages"][-1].pretty_print()
+"""
+
+if __name__ == "__main__":
+    # Example usage of the graph with a user profile and ToDo list
+    config = {"configurable": {"thread_id": "1", "user_id": "Lance"}}
+
+    while True:
+        user_msg = input('> Enter your message: ')
+
+        # User input to create a profile memory
+        input_messages = [HumanMessage(content=user_msg)]
+
+        # Run the graph
+        for chunk in graph.stream({"messages": input_messages}, config, stream_mode="messages"):
+            print(chunk)

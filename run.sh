@@ -14,4 +14,11 @@ tell application "Terminal"
 end tell
 EOF
 
-echo "Both backend and frontend are starting in new Terminal windows."
+# Run worker in new Terminal window
+osascript <<EOF
+tell application "Terminal"
+    do script "cd \"$(pwd)/backend\" && source venv/bin/activate && export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES && rq worker chat_jobs --url redis://localhost:6379"
+end tell
+EOF
+
+echo "Backend, frontend, and worker are starting in new Terminal windows."

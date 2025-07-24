@@ -1,3 +1,5 @@
+// src/components/ChatInterface.jsx
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, X } from 'lucide-react';
 import { todoAPI } from '../services/api';
@@ -8,7 +10,10 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState(null);
   const [streamingMessage, setStreamingMessage] = useState('');
+  const [currentJobId, setCurrentJobId] = useState(null);
   const messagesEndRef = useRef(null);
+  const streamCloseRef = useRef(null);
+  const streamingMessageRef = useRef('');
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -18,50 +23,86 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
     scrollToBottom();
   }, [messages, streamingMessage]);
 
+  // Cleanup stream connection on unmount
+  useEffect(() => {
+    return () => {
+      if (streamCloseRef.current) {
+        streamCloseRef.current();
+      }
+    };
+  }, []);
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
     const userMessage = { role: 'user', content: inputMessage };
-    setMessages(prev => [...prev, userMessage]);
+    if(messages.length === 0) { 
+      setMessages([userMessage]);
+    } else {
+      setMessages(prev => [...prev, userMessage]);
+    }
     setInputMessage('');
     setIsLoading(true);
     setStreamingMessage('');
 
     try {
-      const endpoint = threadId ? '/chat/continue/stream' : '/chat/new/stream';
-      const payload = threadId 
-        ? { user_id: userId, thread_id: threadId, message: inputMessage }
-        : { user_id: userId, message: inputMessage };
+      // Send message and get job info
+      const response = threadId 
+        ? await todoAPI.continueChat(userId, threadId, inputMessage)
+        : await todoAPI.startNewChat(userId, inputMessage);
 
-      await todoAPI.streamChat(endpoint, payload, (data) => {
-        switch (data.type) {
-          case 'start':
-            if (!threadId && data.thread_id) {
-              setThreadId(data.thread_id);
-            }
-            setStreamingMessage('🤔 Thinking...');
-            break;
-          case 'chunk':
-            setStreamingMessage(data.content);
-            break;
-          case 'end':
-            setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
-            setStreamingMessage('');
-            setIsLoading(false);
-            // Refresh todos after AI response
-            onTodoUpdate();
-            break;
-          case 'error':
-            console.error('Streaming error:', data.error);
-            setMessages(prev => [...prev, { 
-              role: 'assistant', 
-              content: 'Sorry, I encountered an error. Please try again.' 
-            }]);
-            setStreamingMessage('');
-            setIsLoading(false);
-            break;
+      if (!threadId && response.thread_id) {
+        setThreadId(response.thread_id);
+      }
+
+      setCurrentJobId(response.job_id);
+
+      // Start streaming results
+      const closeStream = todoAPI.streamJobResults(
+        response.job_id,
+        (data) => {
+          switch (data.type) {
+            case 'start':
+              //setStreamingMessage('🤔 Thinking...');
+              break;
+            case 'chunk':
+              setStreamingMessage(prev => {
+                const updated = (prev || "") + data.content;
+                streamingMessageRef.current = updated;
+                return updated;
+              });
+              break;
+            case 'end':
+              // Use the ref to get the latest value
+              const finalContent = streamingMessageRef.current + (data.content || "");
+              setMessages(prev => [...prev, { role: 'assistant', content: finalContent }]);
+              setStreamingMessage('');
+              streamingMessageRef.current = '';
+              setIsLoading(false);
+              setCurrentJobId(null);
+              onTodoUpdate();
+              break;
+          }
+        },
+        (error) => {
+          console.error('Streaming error:', error);
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: 'Sorry, I encountered an error. Please try again.' 
+          }]);
+          setStreamingMessage('');
+          setIsLoading(false);
+          setCurrentJobId(null);
+        },
+        (data) => {
+          // Completion callback
+          setIsLoading(false);
+          setCurrentJobId(null);
         }
-      });
+      );
+
+      streamCloseRef.current = closeStream;
+
     } catch (error) {
       console.error('Error sending message:', error);
       setMessages(prev => [...prev, { 
@@ -70,6 +111,7 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
       }]);
       setStreamingMessage('');
       setIsLoading(false);
+      setCurrentJobId(null);
     }
   };
 
@@ -95,7 +137,14 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
     <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-lg shadow-xl border border-gray-200 flex flex-col z-50">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h3 className="font-semibold text-gray-900">Todo mAIstro</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold text-gray-900">Todo mAIstro</h3>
+          {currentJobId && (
+            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+              Job: {currentJobId.slice(0, 8)}...
+            </span>
+          )}
+        </div>
         <button
           onClick={onToggle}
           className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -111,6 +160,7 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
             <MessageCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
             <p>Hi! I'm your AI assistant.</p>
             <p className="text-sm">Ask me to help manage your todos!</p>
+            <p className="text-xs mt-2 text-blue-600">Now powered by Redis queues!</p>
           </div>
         )}
         
@@ -131,15 +181,22 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
           </div>
         ))}
 
-        {streamingMessage && (
+        {streamingMessage.length == 0 && isLoading && (
           <div className="flex justify-start">
             <div className="max-w-[80%] p-3 rounded-lg bg-gray-100 text-gray-900">
-              <p className="text-sm whitespace-pre-wrap">{streamingMessage}</p>
               <div className="flex items-center mt-2">
                 <div className="animate-pulse text-blue-600">●</div>
                 <div className="animate-pulse text-blue-600 ml-1">●</div>
                 <div className="animate-pulse text-blue-600 ml-1">●</div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {streamingMessage && (
+          <div className="flex justify-start">
+            <div className="max-w-[80%] p-3 rounded-lg bg-gray-100 text-gray-900">
+              <p className="text-sm whitespace-pre-wrap">{streamingMessage}</p>
             </div>
           </div>
         )}
@@ -167,6 +224,11 @@ const ChatInterface = ({ userId, onTodoUpdate, isOpen, onToggle }) => {
             <Send className="h-4 w-4" />
           </button>
         </div>
+        {isLoading && (
+          <div className="mt-2 text-xs text-blue-600">
+            Job queued and processing...
+          </div>
+        )}
       </div>
     </div>
   );
