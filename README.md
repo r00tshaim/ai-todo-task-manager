@@ -77,6 +77,11 @@ The frontend UI displays the bot’s message “chunk-by-chunk” as streamed ev
 6. /todos/get and similar endpoints read directly from PostgreSQL
 
 
+## png version of application working
+
+<img width="2362" height="1062" alt="image" src="https://github.com/user-attachments/assets/d48b3f2b-824b-4709-9a53-bf317f171d3b" />
+
+
 ## agent working
 
 <img width="3840" height="2010" alt="AI todo application" src="https://github.com/user-attachments/assets/b3bbbf3d-1c98-4e8d-9393-e7f01479de85" />
