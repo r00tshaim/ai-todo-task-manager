@@ -21,4 +21,7 @@ tell application "Terminal"
 end tell
 EOF
 
+# Start Docker containers
+docker-compose -f docker-compose.yml up -d
+
 echo "Backend, frontend, and worker are starting in new Terminal windows."
