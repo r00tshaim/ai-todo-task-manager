@@ -75,3 +75,9 @@ The frontend UI displays the bot’s message “chunk-by-chunk” as streamed ev
 5. All to-dos/metadata are stored persistently in PostgreSQL using LangGraph’s PostgresStore
 
 6. /todos/get and similar endpoints read directly from PostgreSQL
+
+
+## agent working
+
+<img width="3840" height="2010" alt="AI todo application" src="https://github.com/user-attachments/assets/b3bbbf3d-1c98-4e8d-9393-e7f01479de85" />
+
