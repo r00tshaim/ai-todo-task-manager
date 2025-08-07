@@ -28,3 +28,10 @@ class Instructions(Base):
     __tablename__ = "instructions"
     user_id = Column(String, primary_key=True)
     instructions = Column(Text)
+
+class UserTokenCount(Base):
+    __tablename__ = "user_token_counts"
+    user_id = Column(String, primary_key=True)
+    token_count = Column(Integer, default=0)
+
+
